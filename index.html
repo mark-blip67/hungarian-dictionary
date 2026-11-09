@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Венгерский">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>Szia!</title>
+<title>Мой интерактивный венгерский словарь</title>
 <script>
 /* Применяем сохранённую тему до отрисовки, чтобы не было «вспышки» */
 (function () {
@@ -277,6 +277,22 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 .chip.active .n { background: rgba(255, 255, 255, .25); color: #fff; }
 .count { color: var(--muted); font-size: .88rem; margin-bottom: 10px; }
 
+.topic-filter { margin: 0 0 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.topic-filter > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; cursor: pointer; font-weight: 650; color: var(--text); }
+.topic-filter > summary::-webkit-details-marker { display: none; }
+.topic-filter > summary::after { content: '＋'; color: var(--muted); font-size: 1.1rem; }
+.topic-filter[open] > summary::after { content: '−'; }
+.topic-filter .filter-current { color: var(--muted); font-size: .85rem; font-weight: 500; margin-left: auto; }
+.topic-filter .chips { padding: 0 12px 12px; margin: 0; }
+.sync-fields { display: grid; gap: 10px; }
+.sync-id-row { display: flex; align-items: center; gap: 8px; }
+.sync-id-row input { min-width: 0; letter-spacing: .08em; font-weight: 700; }
+.sync-state { min-height: 1.3em; }
+.auto-translate-note { min-height: 1.2em; margin: 4px 0 0; color: var(--muted); font-size: .82rem; }
+.flip { transition: opacity .16s ease, transform .16s ease; }
+.flip.is-changing { opacity: .25; transform: scale(.985); }
+@media (min-width: 641px) { .topic-filter { margin-bottom: 12px; } }
+
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-left: 5px solid hsl(var(--h) 65% 55%);
@@ -516,7 +532,10 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
       <button type="button" class="btn primary" id="btnAdd">+ Добавить слово</button>
     </div>
     <div class="kbd" id="kbdDict" data-scope="#view-dict" data-default="#search"></div>
-    <div class="chips" id="chips" aria-label="Темы"></div>
+    <details class="topic-filter" id="topicFilter">
+      <summary><span>Фильтр по темам</span><span class="filter-current" id="activeThemeLabel">Все темы</span></summary>
+      <div class="chips" id="chips" aria-label="Темы"></div>
+    </details>
     <div class="count" id="resultCount"></div>
     <div class="grid" id="grid"></div>
     <div class="empty" id="emptyDict" hidden>
@@ -552,9 +571,9 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
           </div>
         </div>
 
-        <p class="hint">Пробел — перевернуть · ← не знаю · → знаю</p>
+        <p class="hint">Пробел — перевернуть · ← повторить · → знаю</p>
         <div class="study-actions">
-          <button type="button" class="btn bad big" id="btnDont">✗ Не знаю</button>
+          <button type="button" class="btn bad big" id="btnDont">↻ Повторить</button>
           <button type="button" class="btn ok big" id="btnKnow">✓ Знаю</button>
         </div>
       </div>
@@ -604,7 +623,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
       <div class="view-head"><h2>Профиль</h2></div>
 
       <div class="panel" id="acctPanel">
-        <h3>Аккаунт и синхронизация</h3>
+        <h3>Синхронизация между устройствами</h3>
         <div id="acctBox"></div>
       </div>
 
@@ -704,7 +723,11 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
           <input type="text" id="fHu" placeholder="alma" required autocapitalize="off">
         </label>
         <label>Перевод на русский *
-          <input type="text" id="fRu" placeholder="яблоко" required>
+          <span class="inline-btn">
+            <input type="text" id="fRu" placeholder="яблоко" required>
+            <button type="button" class="btn small" id="btnAutoTranslate" title="Перевести на венгерский и создать пример">Перевести</button>
+          </span>
+          <span class="auto-translate-note" id="autoTranslateStatus" aria-live="polite"></span>
         </label>
       </div>
       <div class="kbd" data-scope="#editDlg" data-default="#fHu"></div>
@@ -817,12 +840,8 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   /* =====================================================
    * 0. НАСТРОЙКИ
    * ===================================================== */
-  // Client ID для входа через Google можно вписать сюда или ввести в «Профиле».
-  var GOOGLE_CLIENT_ID = '';
-
-  var SYNC_FILE = 'hungarian-dictionary.json';
-  var GIS_SRC = 'https://accounts.google.com/gsi/client';
-  var DRIVE_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.appdata';
+  // Облачное хранилище обслуживается отдельным Cloudflare Worker.
+  // URL Worker задаётся в Профиле; пользователю не нужен аккаунт Google.
   var TESS_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
   var HU_CHARS = ['á', 'é', 'í', 'ó', 'ö', 'ő', 'ú', 'ü', 'ű'];
   var WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -1072,7 +1091,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   var LS = {
     words: 'huDict.words.v1', progress: 'huDict.progress.v1', settings: 'huDict.settings.v1',
     pts: 'huDict.pts.v1', activity: 'huDict.activity.v1', tomb: 'huDict.tomb.v1',
-    texts: 'huDict.texts.v1', account: 'huDict.account.v1'
+    texts: 'huDict.texts.v1', textTomb: 'huDict.textTomb.v1', account: 'huDict.account.v1'
   };
 
   function lsGet(key, fallback) {
@@ -1106,11 +1125,12 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
 
   var DEFAULT_CFG = {
     sort: 'added', dir: 'hu-ru', onlyNew: false, theme: 'auto', goal: 10,
-    remind: false, remindTime: '20:00', kbd: true, clientId: '', notified: '', hideTip: false
+    remind: false, remindTime: '20:00', kbd: true, notified: '', hideTip: false,
+    syncEndpoint: '', syncId: '', syncRevision: 0, syncLastSync: 0
   };
 
   var state = {
-    words: [], progress: {}, pts: {}, activity: {}, tomb: {}, texts: [], account: null,
+    words: [], progress: {}, pts: {}, activity: {}, tomb: {}, texts: [], textTomb: {}, account: null,
     cfg: Object.assign({}, DEFAULT_CFG),
     theme: 'all', status: 'all', query: '', view: 'today', studyDirty: true,
     openText: null,
@@ -1132,6 +1152,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     state.tomb = obj(LS.tomb);
     var tx = lsGet(LS.texts, []);
     state.texts = Array.isArray(tx) ? tx.filter(function (t) { return t && t.id && typeof t.body === 'string'; }) : [];
+    state.textTomb = obj(LS.textTomb);
     var acc = lsGet(LS.account, null);
     state.account = (acc && typeof acc === 'object' && acc.sub) ? acc : null;
 
@@ -1145,7 +1166,10 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     c.remind = !!s.remind;
     if (/^\d{2}:\d{2}$/.test(s.remindTime || '')) c.remindTime = s.remindTime;
     c.kbd = s.kbd !== false;
-    c.clientId = String(s.clientId || '');
+    c.syncEndpoint = String(s.syncEndpoint || '');
+    c.syncId = String(s.syncId || '');
+    c.syncRevision = Math.max(0, Number(s.syncRevision) || 0);
+    c.syncLastSync = Math.max(0, Number(s.syncLastSync) || 0);
     c.notified = String(s.notified || '');
     c.hideTip = !!s.hideTip;
   }
@@ -1153,8 +1177,9 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   function saveWords() { lsSet(LS.words, state.words); scheduleSync(); }
   function saveProgress() { lsSet(LS.progress, state.progress); lsSet(LS.pts, state.pts); scheduleSync(); }
   function saveActivity() { lsSet(LS.activity, state.activity); scheduleSync(); }
-  function saveTomb() { lsSet(LS.tomb, state.tomb); }
-  function saveTexts() { lsSet(LS.texts, state.texts); }
+  function saveTomb() { lsSet(LS.tomb, state.tomb); scheduleSync(); }
+  function saveTexts() { lsSet(LS.texts, state.texts); scheduleSync(); }
+  function saveTextTomb() { lsSet(LS.textTomb, state.textTomb); scheduleSync(); }
   function saveAccount() { lsSet(LS.account, state.account); }
   function saveCfg() { lsSet(LS.settings, state.cfg); }
 
@@ -1461,6 +1486,8 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
         '" data-theme="' + esc(t) + '" style="--h:' + themeHue(t) + '">' + esc(t) + ' <span class="n">' + n + '</span></button>';
     });
     $('#chips').innerHTML = html;
+    var activeLabel = $('#activeThemeLabel');
+    if (activeLabel) activeLabel.textContent = state.theme === 'all' ? 'Все темы' : state.theme;
   }
 
   function cardHTML(w) {
@@ -1527,6 +1554,9 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
 
   function openEdit(id) {
     var w = id ? byId(id) : null;
+    autoTranslateToken++;
+    clearTimeout(autoTranslateTimer);
+    $('#autoTranslateStatus').textContent = '';
     fillThemeList();
     $('#dlgTitle').textContent = w ? 'Редактировать слово' : 'Новое слово';
     $('#fId').value = w ? w.id : '';
@@ -1554,6 +1584,98 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     renderActive();
     toast('Слово удалено');
   }
+
+  var autoTranslateToken = 0;
+  var autoTranslateTimer = null;
+  var translationCache = Object.create(null);
+
+  function decodeEntities(value) {
+    var el = document.createElement('textarea');
+    el.innerHTML = String(value || '');
+    return el.value;
+  }
+
+  function translateText(text, from, to) {
+    text = String(text || '').trim();
+    if (!text) return Promise.resolve(null);
+    var key = from + '>' + to + ':' + text.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(translationCache, key)) return Promise.resolve(translationCache[key]);
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
+    var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 450)) +
+      '&langpair=' + encodeURIComponent(from + '|' + to);
+    return fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function (r) {
+      if (!r.ok) throw new Error('Сервис перевода вернул ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      clearTimeout(timer);
+      var out = j && j.responseData && j.responseData.translatedText;
+      out = out ? decodeEntities(out).replace(/<[^>]*>/g, '').trim() : '';
+      if (!out || (j && Number(j.responseStatus) !== 200) || /MYMEMORY WARNING|PLEASE SELECT|INVALID/i.test(out)) out = null;
+      if (out) translationCache[key] = out;
+      return out;
+    }).catch(function () { clearTimeout(timer); return null; });
+  }
+
+  function inferPartOfSpeech(ru) {
+    var t = String(ru || '').trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
+    if (!t) return 'Существительное';
+    if (/\s/.test(t)) return 'Фраза';
+    if (/^(я|ты|он|она|оно|мы|вы|они|этот|эта|это|тот|та|то|мой|моя|моё|мои|кто|что|никто|ничто)$/.test(t)) return 'Местоимение';
+    if (/^(один|одна|одно|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|первый|второй)$/.test(t) || /^\d+$/.test(t)) return 'Числительное';
+    if (/(ться|тись|ть|ти|чь)$/.test(t)) return 'Глагол';
+    if (/(ый|ий|ой|ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ыми|ими|ской|цкий)$/.test(t)) return 'Прилагательное';
+    if (/^(хорошо|плохо|быстро|медленно|часто|редко|сильно|тихо|громко|вместе|сейчас|сегодня|вчера|завтра|здесь|там|везде|уже|ещё|снова|всегда|никогда|иногда|почти|очень|много|мало|далеко|близко|сначала|потом)$/.test(t) || /(ски|жды)$/.test(t)) return 'Наречие';
+    if (/^(в|во|на|над|под|за|из|изо|к|ко|от|до|у|при|про|без|для|между|через)$/.test(t)) return 'Послелог';
+    if (/^(и|а|но|или|если|чтобы|потому|хотя)$/.test(t)) return 'Союз';
+    return 'Существительное';
+  }
+
+  function exampleForRussian(pos, ru) {
+    if (pos === 'Глагол') return 'Я хочу ' + ru + '.';
+    if (pos === 'Прилагательное') return 'Это очень ' + ru + '.';
+    if (pos === 'Наречие') return 'Он говорит ' + ru + '.';
+    if (pos === 'Местоимение') return 'Я использую слово «' + ru + '». ';
+    return 'Это ' + ru + '.';
+  }
+
+  function autoTranslateFromRussian(force) {
+    var ru = $('#fRu').value.trim();
+    if (!ru) { $('#autoTranslateStatus').textContent = 'Сначала введите русский перевод.'; return; }
+    if ($('#fId').value && !force) return;
+    var token = ++autoTranslateToken;
+    var pos = inferPartOfSpeech(ru);
+    var exRu = exampleForRussian(pos, ru).trim();
+    $('#autoTranslateStatus').textContent = 'Переводим слово и готовим пример…';
+    translateText(ru, 'ru', 'hu').then(function (hu) {
+      if (token !== autoTranslateToken || $('#fRu').value.trim() !== ru) return;
+      if (!hu) {
+        $('#autoTranslateStatus').textContent = 'Перевод не получен. Проверьте интернет или введите венгерское слово вручную.';
+        return;
+      }
+      if (force || !$('#fHu').value.trim()) $('#fHu').value = hu;
+      if (force || !$('#fPos').value.trim()) $('#fPos').value = pos;
+      if (force || !$('#fTr').value.trim()) $('#fTr').value = huToRu(splitHu(hu).main);
+      if (force || !$('#fExRu').value.trim()) $('#fExRu').value = exRu;
+      $('#autoTranslateStatus').textContent = 'Слово переведено. Генерируем короткий пример…';
+      translateText(exRu, 'ru', 'hu').then(function (exampleHu) {
+        if (token !== autoTranslateToken || $('#fRu').value.trim() !== ru) return;
+        if (exampleHu && (force || !$('#fEx').value.trim())) $('#fEx').value = exampleHu;
+        $('#autoTranslateStatus').textContent = exampleHu
+          ? 'Готово. Часть речи определена приблизительно — проверьте её и пример.'
+          : 'Слово переведено; пример не удалось получить автоматически. Его можно заполнить вручную.';
+      });
+    });
+  }
+
+  $('#fRu').addEventListener('input', function () {
+    if ($('#fId').value) return;
+    clearTimeout(autoTranslateTimer);
+    autoTranslateTimer = setTimeout(function () {
+      if (/[а-яё]/i.test($('#fRu').value)) autoTranslateFromRussian(false);
+    }, 850);
+  });
+  $('#btnAutoTranslate').addEventListener('click', function () { autoTranslateFromRussian(true); });
 
   $('#editForm').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -1609,6 +1731,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     if (!b) return;
     state.theme = b.getAttribute('data-theme');
     renderChips(); renderCards();
+    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) $('#topicFilter').open = false;
   });
   $('#search').addEventListener('input', function (e) { state.query = e.target.value; renderCards(); });
   $('#sort').addEventListener('change', function (e) { state.cfg.sort = e.target.value; saveCfg(); renderCards(); });
@@ -1697,20 +1820,28 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     try { el.focus({ preventScroll: true }); } catch (e) { /* не критично */ }
   }
 
+  var answerLocked = false;
   function answer(know) {
     var s = state.study;
-    if (!s.queue.length) return;
+    if (!s.queue.length || answerLocked) return;
+    answerLocked = true;
     var id = s.queue.shift();
     state.progress[id] = !!know;
     state.pts[id] = Date.now();
     if (know) s.known++;
-    else { s.again++; s.queue.splice(Math.min(3, s.queue.length), 0, id); }
+    else { s.again++; s.queue.push(id); }
     saveProgress();
     bumpActivity();
     updateHeader();
-    setFlipped(false, false);
-    renderStudy();
-    focusCard();
+    var card = $('#flip');
+    if (card && !$('#studyPlay').hidden) card.classList.add('is-changing');
+    window.setTimeout(function () {
+      setFlipped(false, false);
+      renderStudy();
+      if (card) card.classList.remove('is-changing');
+      answerLocked = false;
+      focusCard();
+    }, 130);
   }
 
   function enterStudy() {
@@ -1878,24 +2009,8 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     return text.slice(s, e).replace(/\s+/g, ' ').trim();
   }
 
-  /* ---- автоперевод (MyMemory, бесплатный, нужен интернет) ---- */
-  var trCache = {};
-  function translateHu(text) {
-    text = String(text || '').trim();
-    if (!text) return Promise.resolve(null);
-    if (Object.prototype.hasOwnProperty.call(trCache, text)) return Promise.resolve(trCache[text]);
-    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 9000);
-    var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 450)) + '&langpair=hu|ru';
-    return fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function (r) { return r.json(); }).then(function (j) {
-      clearTimeout(timer);
-      var out = j && j.responseData && j.responseData.translatedText;
-      var okStatus = !j || Number(j.responseStatus) === 200;
-      if (!out || !okStatus || /MYMEMORY WARNING|PLEASE SELECT|INVALID/i.test(out)) out = null;
-      trCache[text] = out;
-      return out;
-    }).catch(function () { clearTimeout(timer); return null; });
-  }
+  /* ---- Перевод текста и отдельных венгерских слов через MyMemory ---- */
+  function translateHu(text) { return translateText(text, 'hu', 'ru'); }
   function matchCase(tr, src) {
     if (!tr) return tr;
     return src === src.toLowerCase() ? tr.charAt(0).toLowerCase() + tr.slice(1).replace(/\.$/, '') : tr;
@@ -2012,7 +2127,9 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   $('#btnReaderDel').addEventListener('click', function () {
     var t = currentText();
     if (!t || !window.confirm('Удалить текст «' + t.title + '»? Слова, добавленные из него, останутся в словаре.')) return;
+    state.textTomb[t.id] = Date.now();
     state.texts = state.texts.filter(function (x) { return x.id !== t.id; });
+    saveTextTomb();
     saveTexts();
     state.openText = null;
     renderTextView();
@@ -2050,6 +2167,16 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
         var g = c.getContext('2d');
         g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
         g.drawImage(img, 0, 0, c.width, c.height);
+        try {
+          var pixels = g.getImageData(0, 0, c.width, c.height);
+          var d = pixels.data;
+          for (var i = 0; i < d.length; i += 4) {
+            var gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            var contrast = Math.max(0, Math.min(255, (gray - 128) * 1.22 + 128));
+            d[i] = d[i + 1] = d[i + 2] = contrast;
+          }
+          g.putImageData(pixels, 0, 0);
+        } catch (e) { /* canvas фильтр не обязателен; исходное изображение остаётся пригодным для OCR */ }
         URL.revokeObjectURL(url);
         resolve(c);
       };
@@ -2083,7 +2210,10 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
           if (run !== ocrRun || !m) return;
           if (m.status === 'recognizing text') setOcrStatus('Распознаём текст… ' + Math.round((m.progress || 0) * 100) + '%', 0.1 + 0.9 * (m.progress || 0));
           else if (STATUS[m.status]) setOcrStatus(STATUS[m.status], 0.05);
-        }
+        },
+        tessedit_pageseg_mode: 6,
+        preserve_interword_spaces: '1',
+        user_defined_dpi: '300'
       });
     }).then(function (res) {
       if (run !== ocrRun || !res) return;
@@ -2281,6 +2411,18 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   $('#btnImport').addEventListener('click', function () {
     var raw = $('#importText').value;
     if (!raw.trim()) { showResult('Сначала вставьте текст для импорта.', 'warn'); return; }
+    var possibleBackup = null;
+    try { possibleBackup = JSON.parse(raw); } catch (e) { possibleBackup = null; }
+    if (possibleBackup && Number(possibleBackup.version) >= 3 && Array.isArray(possibleBackup.words)) {
+      if (!window.confirm('Обнаружена полная резервная копия. Объединить её со словарём на этом устройстве, включая прогресс карточек и статистику?')) return;
+      var restored = mergeData(makeSnapshot(), possibleBackup);
+      applyMerged(restored);
+      saveWords(); saveProgress(); saveActivity(); saveTomb(); saveTexts(); saveTextTomb();
+      renderActive();
+      $('#importText').value = '';
+      showResult('<strong>Резервная копия восстановлена.</strong> Слова, прогресс и статистика объединены с текущими данными.', 'ok');
+      return;
+    }
     var parsed = parseImport(raw);
     var res = mergeItems(parsed.items, $('#importUpdate').checked, $('#importTheme').value.trim());
     if (res.added || res.updated) { persistWords(); }
@@ -2319,11 +2461,12 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   });
 
   $('#btnExport').addEventListener('click', function () {
-    var payload = JSON.stringify({ words: state.words.map(function (w) {
-      return { hu: w.hu, ru: w.ru, tr: w.tr, pos: w.pos, theme: w.theme, ex: w.ex, exRu: w.exRu, swatch: w.swatch };
-    }) }, null, 2);
+    var payload = JSON.stringify({
+      version: 3, exportedAt: Date.now(), words: state.words, progress: state.progress,
+      pts: state.pts, activity: state.activity, tomb: state.tomb, texts: state.texts, textTomb: state.textTomb
+    }, null, 2);
     downloadBlob('vengerskiy-slovar.json', 'application/json', payload);
-    toast('Резервная копия скачана (слова; прогресс и серия хранятся отдельно)');
+    toast('Резервная копия скачана');
   });
 
   $('#btnRestoreSeed').addEventListener('click', function () {
@@ -2343,69 +2486,82 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   });
 
   /* =====================================================
-   * 15. ВХОД ЧЕРЕЗ GOOGLE И СИНХРОНИЗАЦИЯ (Google Drive, скрытая папка приложения)
+   * 15. ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ ПО SYNC ID
    * ===================================================== */
-  var auth = { token: '', exp: 0, client: null, cid: '', pending: null, syncing: false, timer: null, status: '' };
+  var syncState = { busy: false, timer: null, pending: false, status: '' };
+  var SYNC_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  function getClientId() { return (GOOGLE_CLIENT_ID || state.cfg.clientId || '').trim(); }
-  function tokenValid() { return !!auth.token && Date.now() < auth.exp; }
-
-  function requestToken(prompt) {
-    return new Promise(function (resolve, reject) {
-      var cid = getClientId();
-      if (!cid) return reject(new Error('Не указан Client ID'));
-      if (!/^https?:$/.test(location.protocol)) {
-        return reject(new Error('Вход через Google работает, только когда приложение открыто по ссылке (https://), а не как файл с диска'));
-      }
-      loadScript(GIS_SRC).then(function () {
-        if (!auth.client || auth.cid !== cid) {
-          auth.cid = cid;
-          auth.client = window.google.accounts.oauth2.initTokenClient({
-            client_id: cid, scope: DRIVE_SCOPE,
-            callback: function (resp) {
-              var p = auth.pending; auth.pending = null;
-              if (!p) return;
-              if (!resp || resp.error) p.reject(new Error((resp && (resp.error_description || resp.error)) || 'Ошибка входа'));
-              else {
-                auth.token = resp.access_token;
-                auth.exp = Date.now() + ((Number(resp.expires_in) || 3600) - 60) * 1000;
-                p.resolve(auth.token);
-              }
-            },
-            error_callback: function (err) {
-              var p = auth.pending; auth.pending = null;
-              if (p) p.reject(new Error(err && err.type === 'popup_closed' ? 'Окно входа закрыто' : 'Не удалось войти' + (err && err.type ? ' (' + err.type + ')' : '')));
-            }
-          });
-        }
-        auth.pending = { resolve: resolve, reject: reject };
-        auth.client.requestAccessToken({ prompt: prompt });
-      }, function () { reject(new Error('Не удалось загрузить Google (нет интернета?)')); });
-    });
+  function normalizeSyncId(value) {
+    var raw = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{16}$/.test(raw)) return '';
+    return raw;
   }
 
-  function driveFetch(url, opts) {
-    opts = opts || {};
-    opts.headers = Object.assign({ Authorization: 'Bearer ' + auth.token }, opts.headers || {});
-    return fetch(url, opts).then(function (r) {
-      if (r.status === 401) { auth.token = ''; throw new Error('Нужно войти заново'); }
-      if (!r.ok) throw new Error('Google Drive вернул ошибку ' + r.status);
-      return r;
+  function formatSyncId(raw) {
+    raw = normalizeSyncId(raw);
+    return raw ? raw.match(/.{1,4}/g).join('-') : '';
+  }
+
+  function generateSyncId() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    else for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    var out = '';
+    for (var j = 0; j < 16; j++) out += SYNC_ALPHABET.charAt(bytes[j] & 31);
+    return out;
+  }
+
+  function syncEndpoint() {
+    return String(state.cfg.syncEndpoint || '').trim().replace(/\/+$/, '');
+  }
+
+  function syncUrl(id) { return syncEndpoint() + '/v1/sync/' + encodeURIComponent(id); }
+
+  function syncFetch(id, method, body) {
+    var options = { method: method, headers: { 'Accept': 'application/json' } };
+    if (body !== undefined) {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
+    return fetch(syncUrl(id), options).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok && r.status !== 409) {
+          var msg = j && j.error === 'not_found' ? 'Sync ID не найден в облаке.' :
+            (j && j.message) || ('Облачный сервер вернул ошибку ' + r.status);
+          var err = new Error(msg);
+          err.status = r.status; err.payload = j;
+          throw err;
+        }
+        return { status: r.status, body: j };
+      });
     });
   }
 
   function makeSnapshot() {
-    return { v: 2, updatedAt: Date.now(), words: state.words, progress: state.progress, pts: state.pts, activity: state.activity, tomb: state.tomb };
+    return {
+      v: 3,
+      updatedAt: Date.now(),
+      words: state.words,
+      progress: state.progress,
+      pts: state.pts,
+      activity: state.activity,
+      tomb: state.tomb,
+      texts: state.texts,
+      textTomb: state.textTomb
+    };
   }
 
-  // Слияние двух копий данных без потерь: слова объединяются, при конфликте побеждает более свежая правка
+  // Слова сливаются по нормализованному венгерскому ключу; более новая правка побеждает.
+  // Удалённые слова защищены tombstone-метками, прогресс — временем последнего ответа.
   function mergeData(L, R) {
+    L = L || {}; R = R || {};
     var tomb = Object.assign({}, R.tomb || {});
-    Object.keys(L.tomb || {}).forEach(function (k) { tomb[k] = Math.max(tomb[k] || 0, L.tomb[k]); });
+    Object.keys(L.tomb || {}).forEach(function (k) { tomb[k] = Math.max(tomb[k] || 0, L.tomb[k] || 0); });
 
     var byKey = new Map(), idMapR = {};
     (L.words || []).forEach(function (w) { byKey.set(keyOf(w.hu), w); });
     (R.words || []).forEach(function (rw) {
+      if (!rw || !rw.hu) return;
       var k = keyOf(rw.hu), lw = byKey.get(k);
       if (!lw) { byKey.set(k, rw); idMapR[rw.id] = rw.id; }
       else {
@@ -2414,7 +2570,10 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
       }
     });
     var words = [];
-    byKey.forEach(function (w, k) { if ((tomb[k] || 0) > (w.ts || 0)) return; words.push(w); });
+    byKey.forEach(function (w, k) {
+      if ((tomb[k] || 0) > (w.ts || 0)) return;
+      words.push(w);
+    });
 
     var rprog = {};
     Object.keys(R.progress || {}).forEach(function (rid) {
@@ -2423,7 +2582,8 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     });
     var progress = {}, pts = {};
     words.forEach(function (w) {
-      var l = (L.progress && L.progress[w.id] !== undefined) ? { v: L.progress[w.id], t: (L.pts && L.pts[w.id]) || 0 } : null;
+      var l = (L.progress && L.progress[w.id] !== undefined)
+        ? { v: L.progress[w.id], t: (L.pts && L.pts[w.id]) || 0 } : null;
       var r = rprog[w.id] || null, pick = null;
       if (l && r) pick = (l.t === r.t) ? { v: !!(l.v || r.v), t: l.t } : (l.t > r.t ? l : r);
       else pick = l || r;
@@ -2435,144 +2595,197 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
       var a = la[d], b = ra[d];
       activity[d] = { n: Math.max((a && a.n) || 0, (b && b.n) || 0), done: !!((a && a.done) || (b && b.done)) };
     });
-    return { words: words, progress: progress, pts: pts, activity: activity, tomb: tomb };
+
+    var textTomb = Object.assign({}, R.textTomb || {});
+    Object.keys(L.textTomb || {}).forEach(function (id) { textTomb[id] = Math.max(textTomb[id] || 0, L.textTomb[id] || 0); });
+    var textMap = new Map();
+    (L.texts || []).concat(R.texts || []).forEach(function (t) {
+      if (!t || !t.id || typeof t.body !== 'string') return;
+      var old = textMap.get(t.id);
+      if (!old || (Number(t.ts) || 0) > (Number(old.ts) || 0)) textMap.set(t.id, t);
+    });
+    var texts = [];
+    textMap.forEach(function (t, id) { if ((textTomb[id] || 0) <= (Number(t.ts) || 0)) texts.push(t); });
+
+    return { words: words, progress: progress, pts: pts, activity: activity, tomb: tomb, texts: texts, textTomb: textTomb };
   }
 
   function applyMerged(m) {
-    state.words = m.words.map(sanitizeWord);
-    state.progress = m.progress; state.pts = m.pts; state.activity = m.activity; state.tomb = m.tomb;
-    lsSet(LS.words, state.words); lsSet(LS.progress, state.progress); lsSet(LS.pts, state.pts);
-    lsSet(LS.activity, state.activity); saveTomb();
+    state.words = (m.words || []).map(sanitizeWord);
+    state.progress = m.progress || {};
+    state.pts = m.pts || {};
+    state.activity = m.activity || {};
+    state.tomb = m.tomb || {};
+    state.texts = Array.isArray(m.texts) ? m.texts : state.texts;
+    state.textTomb = m.textTomb || state.textTomb || {};
+    lsSet(LS.words, state.words);
+    lsSet(LS.progress, state.progress);
+    lsSet(LS.pts, state.pts);
+    lsSet(LS.activity, state.activity);
+    lsSet(LS.tomb, state.tomb);
+    lsSet(LS.texts, state.texts);
+    lsSet(LS.textTomb, state.textTomb);
     state.studyDirty = true;
   }
 
-  function setSyncStatus(s) { auth.status = s; if (state.view === 'profile') renderAcct(); }
+  function setSyncStatus(message) {
+    syncState.status = message || '';
+    if (state.view === 'profile') renderAcct();
+  }
 
-  function syncNow(interactive) {
-    if (auth.syncing) return Promise.resolve(false);
-    auth.syncing = true;
-    setSyncStatus('Синхронизация…');
-    var fileId = null;
+  function requireSyncSetup() {
+    if (!syncEndpoint()) throw new Error('Сначала укажите URL Cloudflare Worker в настройках синхронизации.');
+    if (!/^https:\/\//i.test(syncEndpoint())) throw new Error('Адрес облачного сервера должен начинаться с https://');
+  }
+
+  function syncWithCloud(interactive, createNew) {
+    if (syncState.busy) { syncState.pending = true; return Promise.resolve(false); }
+    syncState.busy = true;
+    setSyncStatus(createNew ? 'Создаём облачную копию…' : 'Синхронизация…');
+    var id = createNew ? generateSyncId() : normalizeSyncId(state.cfg.syncId);
+    var done = false;
+
     return Promise.resolve().then(function () {
-      if (tokenValid()) return;
-      if (!interactive) throw new Error('NEEDAUTH');
-      return requestToken(state.account ? '' : 'consent');
-    }).then(function () {
-      if (state.account) return;
-      return fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + auth.token } })
-        .then(function (r) { return r.json(); }).then(function (u) {
-          state.account = { sub: String(u.sub || u.email || 'me'), name: u.name || '', email: u.email || '', picture: u.picture || '', lastSync: 0 };
-          saveAccount();
+      requireSyncSetup();
+      if (!id) throw new Error('Введите корректный Sync ID из 16 символов.');
+      if (createNew) {
+        return syncFetch(id, 'PUT', { expectedRevision: 0, data: makeSnapshot() }).then(function (res) {
+          if (res.status === 409) throw new Error('Не удалось создать новый Sync ID. Повторите попытку.');
+          state.cfg.syncId = formatSyncId(id);
+          state.cfg.syncRevision = Number(res.body.revision) || 1;
+          state.cfg.syncLastSync = Date.now();
+          saveCfg();
+          done = true;
         });
-    }).then(function () {
-      var q = encodeURIComponent("name='" + SYNC_FILE + "'");
-      return driveFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=' + q + '&fields=files(id,name)').then(function (r) { return r.json(); });
-    }).then(function (list) {
-      var f = list.files && list.files[0];
-      fileId = f ? f.id : null;
-      if (!f) return null;
-      return driveFetch('https://www.googleapis.com/drive/v3/files/' + f.id + '?alt=media').then(function (r) { return r.json(); });
-    }).then(function (remote) {
-      if (remote && Array.isArray(remote.words)) applyMerged(mergeData(makeSnapshot(), remote));
-      var body = JSON.stringify(makeSnapshot());
-      if (fileId) {
-        return driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media',
-          { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body });
       }
-      var b = 'hudict' + Math.random().toString(36).slice(2);
-      var multipart = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
-        JSON.stringify({ name: SYNC_FILE, parents: ['appDataFolder'] }) +
-        '\r\n--' + b + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + b + '--';
-      return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-        { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: multipart });
+
+      return syncFetch(id, 'GET').then(function (res) {
+        var remote = res.body;
+        if (!remote || !remote.data) throw new Error('Облачная копия не содержит данных.');
+        var attempts = 0;
+        function mergeAndWrite() {
+          attempts++;
+          if (attempts > 6) throw new Error('Данные часто меняются на другом устройстве. Нажмите «Синхронизировать» ещё раз.');
+          var merged = mergeData(makeSnapshot(), remote.data);
+          applyMerged(merged);
+          var localSnapshot = makeSnapshot();
+          return syncFetch(id, 'PUT', { expectedRevision: Number(remote.revision) || 0, data: localSnapshot }).then(function (put) {
+            if (put.status === 409) {
+              remote = put.body;
+              if (!remote || !remote.data) throw new Error('Конфликт версий облачной копии.');
+              return mergeAndWrite();
+            }
+            state.cfg.syncId = formatSyncId(id);
+            state.cfg.syncRevision = Number(put.body.revision) || (Number(remote.revision) + 1);
+            state.cfg.syncLastSync = Date.now();
+            saveCfg();
+            done = true;
+          });
+        }
+        return mergeAndWrite();
+      });
     }).then(function () {
-      state.account.lastSync = Date.now();
-      saveAccount();
-      auth.syncing = false;
-      setSyncStatus('');
+      if (!done) return false;
+      syncState.busy = false;
+      setSyncStatus('Синхронизировано · ' + new Date().toLocaleTimeString());
       renderActive();
-      if (interactive) toast('Синхронизировано ✓');
+      if (interactive) toast(createNew ? 'Облачная копия создана ✓' : 'Словарь синхронизирован ✓');
+      if (syncState.pending) { syncState.pending = false; scheduleSync(); }
       return true;
     }).catch(function (err) {
-      auth.syncing = false;
-      var msg = err && err.message;
-      if (msg === 'NEEDAUTH') { setSyncStatus('Нажмите «Синхронизировать», чтобы войти снова'); return false; }
-      setSyncStatus('Ошибка: ' + (msg || 'не удалось синхронизировать'));
-      if (interactive) toast(msg || 'Не удалось синхронизировать');
+      syncState.busy = false;
+      setSyncStatus('Ошибка: ' + (err && err.message ? err.message : 'не удалось синхронизировать'));
+      if (interactive) toast(err && err.message ? err.message : 'Не удалось синхронизировать');
+      if (syncState.pending) { syncState.pending = false; scheduleSync(); }
       return false;
     });
   }
 
+  function syncNow(interactive) { return syncWithCloud(!!interactive, false); }
+
+  function createCloudCopy() {
+    if (state.cfg.syncId && !window.confirm('Создать новую отдельную облачную копию? Текущий Sync ID останется действительным, но это устройство будет подключено к новому.')) return;
+    syncWithCloud(true, true);
+  }
+
   function scheduleSync() {
-    if (auth.syncing || !state.account || !tokenValid()) return;
-    clearTimeout(auth.timer);
-    auth.timer = setTimeout(function () { if (state.account && tokenValid()) syncNow(false); }, 3500);
+    if (!state.cfg.syncId || !state.cfg.syncEndpoint) return;
+    clearTimeout(syncState.timer);
+    syncState.timer = setTimeout(function () {
+      if (syncState.busy) { syncState.pending = true; return; }
+      syncNow(false);
+    }, 1200);
   }
-
-  function signOut() {
-    try {
-      if (auth.token && window.google && window.google.accounts && window.google.accounts.oauth2.revoke) window.google.accounts.oauth2.revoke(auth.token, function () {});
-    } catch (e) { /* не критично */ }
-    auth.token = ''; auth.exp = 0;
-    state.account = null;
-    saveAccount();
-    renderAcct();
-    toast('Вы вышли. Слова остались на этом устройстве.');
-  }
-
-  var G_ICON = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.4-4.7 7l7.3 5.7c4.3-4 6.8-9.9 6.8-17.2z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.7 2.3-8.6 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
 
   function renderAcct() {
     var box = $('#acctBox');
-    var cid = getClientId();
-    var file = location.protocol === 'file:';
-    var html = '';
-    if (state.account) {
-      var a = state.account;
-      var initial = esc((a.name || a.email || '?').charAt(0).toUpperCase());
-      html += '<div class="acct">' +
-        (a.picture ? '<img alt="" referrerpolicy="no-referrer" src="' + esc(a.picture) + '">' : '<div class="av">' + initial + '</div>') +
-        '<div class="who"><b>' + esc(a.name || 'Аккаунт Google') + '</b><span>' + esc(a.email) + '</span></div>' +
-        '<button type="button" class="btn small danger" data-act="g-out">Выйти</button></div>' +
-        '<div class="row"><button type="button" class="btn primary" data-act="g-sync"' + (auth.syncing ? ' disabled' : '') + '>↻ Синхронизировать</button>' +
-        '<span class="muted small" id="syncState">' + esc(auth.status || (a.lastSync ? 'Последняя синхронизация: ' + fmtDateTime(a.lastSync) : 'Ещё не синхронизировано')) + '</span></div>' +
-        '<p class="muted small" style="margin:10px 0 0">Слова, прогресс и серия хранятся в вашем Google Drive в скрытой папке приложения — видны только этому словарю. Тексты для чтения остаются на устройстве.</p>';
-    } else {
-      html += '<p class="muted" style="margin-top:0">Без входа всё работает, данные хранятся только в этом браузере. Вход через Google нужен, чтобы слова и серия совпадали на телефоне и компьютере.</p>';
-      if (file) html += '<div class="warn">Сейчас приложение открыто как файл с диска — вход через Google здесь недоступен. Разместите файл на сайте (например, Netlify Drop или GitHub Pages) и откройте по ссылке https://…</div>';
-      if (cid) html += '<div class="row" style="margin-top:0"><button type="button" class="btn g-btn" data-act="g-in">' + G_ICON + ' Войти через Google</button></div>';
-      html += '<details' + (cid ? '' : ' open') + '><summary>' + (cid ? 'Настройка входа (Client ID)' : 'Как включить вход через Google') + '</summary>' +
+    var connectedId = normalizeSyncId(state.cfg.syncId);
+    var shownId = connectedId ? formatSyncId(connectedId) : '';
+    var lastSync = state.cfg.syncLastSync ? 'Последняя синхронизация: ' + fmtDateTime(state.cfg.syncLastSync) : 'Пока не синхронизировано';
+    var status = syncState.status || lastSync;
+    var html =
+      '<p class="muted" style="margin-top:0">Облачная копия связывает компьютер и телефон по секретному Sync ID. Google-аккаунт не требуется. Изменения слов и прогресса автоматически отправляются в облако.</p>' +
+      '<div class="sync-fields">' +
+        '<label>URL Cloudflare Worker<input type="url" id="syncEndpointInput" placeholder="https://your-worker.workers.dev" value="' + esc(state.cfg.syncEndpoint) + '" autocapitalize="off" spellcheck="false"></label>' +
+        '<label>Sync ID' +
+          '<span class="sync-id-row"><input type="text" id="syncIdInput" placeholder="ABCD-EFGH-JKLM-NPQR" value="' + esc(shownId) + '" autocapitalize="characters" spellcheck="false" maxlength="19"><button type="button" class="btn small" data-act="sync-copy"' + (shownId ? '' : ' disabled') + '>Копировать</button></span>' +
+        '</label>' +
+        '<div class="row" style="margin-top:0">' +
+          '<button type="button" class="btn primary" data-act="sync-create"' + (syncState.busy ? ' disabled' : '') + '>☁ Создать облачную копию</button>' +
+          '<button type="button" class="btn" data-act="sync-join"' + (syncState.busy ? ' disabled' : '') + '>↻ Синхронизировать</button>' +
+        '</div>' +
+        '<div class="row" style="margin-top:0">' +
+          '<button type="button" class="btn small ghost danger" data-act="sync-disconnect"' + (shownId ? '' : ' disabled') + '>Отключить Sync ID на этом устройстве</button>' +
+        '</div>' +
+        '<div class="sync-state muted small" id="syncState" role="status" aria-live="polite">' + esc(status) + '</div>' +
+      '</div>' +
+      '<p class="muted small" style="margin:10px 0 0">Sync ID — это пароль к вашей копии. Не публикуйте его. Храните резервную копию JSON в разделе «Данные».</p>' +
+      '<details><summary>Как подключить облачную синхронизацию</summary>' +
         '<ol class="steps">' +
-        '<li>Откройте <b>console.cloud.google.com</b> и создайте проект.</li>' +
-        '<li><b>APIs &amp; Services → Library</b> → включите <b>Google Drive API</b>.</li>' +
-        '<li><b>OAuth consent screen</b> (Google Auth platform): тип External; в доступах (Scopes) добавьте <code>…/auth/drive.appdata</code>; в Test users добавьте свой Gmail.</li>' +
-        '<li><b>Credentials → Create credentials → OAuth client ID</b> → Web application. В «Authorized JavaScript origins» укажите адрес, где размещено приложение (например, <code>https://имя.netlify.app</code>, без слэша в конце).</li>' +
-        '<li>Скопируйте Client ID (оканчивается на <code>.apps.googleusercontent.com</code>) и вставьте ниже.</li>' +
+          '<li>Один раз создайте бесплатный Cloudflare Worker и D1-базу по инструкции к файлу <code>worker.js</code>.</li>' +
+          '<li>Вставьте адрес Worker в поле выше и сохраните его, переключив фокус с поля.</li>' +
+          '<li>На первом устройстве нажмите «Создать облачную копию» и скопируйте Sync ID.</li>' +
+          '<li>На втором устройстве вставьте тот же Sync ID и нажмите «Синхронизировать».</li>' +
         '</ol>' +
-        '<p class="muted small">Google покажет предупреждение «приложение не проверено» — для личного проекта это нормально: «Дополнительно → Перейти».</p>' +
-        '<label class="ctl" style="display:grid;gap:4px"><span>Client ID</span><input type="text" id="clientIdInput" placeholder="1234567890-xxxx.apps.googleusercontent.com" value="' + esc(state.cfg.clientId) + '" autocapitalize="off" spellcheck="false"></label>' +
-        '</details>';
-    }
+      '</details>';
     box.innerHTML = html;
   }
 
   $('#acctBox').addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]');
     if (!b) return;
-    var a = b.getAttribute('data-act');
-    if (a === 'g-in' || a === 'g-sync') {
-      syncNow(true).then(function (ok) { if (ok) renderAcct(); });
-    } else if (a === 'g-out') {
-      if (window.confirm('Выйти из аккаунта? Слова останутся на этом устройстве.')) signOut();
+    var act = b.getAttribute('data-act');
+    if (act === 'sync-create') {
+      state.cfg.syncEndpoint = ($('#syncEndpointInput').value || '').trim().replace(/\/+$/, '');
+      saveCfg();
+      createCloudCopy();
+    } else if (act === 'sync-join') {
+      state.cfg.syncEndpoint = ($('#syncEndpointInput').value || '').trim().replace(/\/+$/, '');
+      var entered = normalizeSyncId($('#syncIdInput').value);
+      if (!entered) { toast('Введите корректный Sync ID из 16 символов'); return; }
+      state.cfg.syncId = formatSyncId(entered);
+      saveCfg();
+      syncNow(true);
+    } else if (act === 'sync-copy') {
+      var value = formatSyncId(state.cfg.syncId);
+      if (value) copyText(value).then(function (ok) { toast(ok ? 'Sync ID скопирован' : 'Не удалось скопировать Sync ID'); });
+    } else if (act === 'sync-disconnect') {
+      if (!window.confirm('Отключить синхронизацию на этом устройстве? Облачная копия останется в облаке.')) return;
+      clearTimeout(syncState.timer);
+      state.cfg.syncId = '';
+      state.cfg.syncRevision = 0;
+      saveCfg();
+      syncState.status = '';
+      renderAcct();
+      toast('Устройство отключено от облака');
     }
   });
+
   $('#acctBox').addEventListener('change', function (e) {
-    if (e.target.id === 'clientIdInput') {
-      state.cfg.clientId = e.target.value.trim();
-      auth.client = null;
+    if (e.target.id === 'syncEndpointInput') {
+      state.cfg.syncEndpoint = e.target.value.trim().replace(/\/+$/, '');
       saveCfg();
-      renderAcct();
-      if (state.cfg.clientId) toast('Client ID сохранён — теперь можно войти');
+      toast('Адрес облачного сервера сохранён');
     }
   });
 
@@ -2694,6 +2907,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   }
 
   loadAll();
+  if (window.matchMedia && window.matchMedia('(min-width: 641px)').matches) $('#topicFilter').open = true;
   applyTheme();
   if (window.matchMedia) {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -2709,6 +2923,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
   setView('today');
   checkReminder();
   setInterval(checkReminder, 30000);
+  if (state.cfg.syncId && state.cfg.syncEndpoint) setTimeout(function () { syncNow(false); }, 1400);
 })();
 </script>
 </body>
