@@ -264,7 +264,19 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .search { position: relative; flex: 1 1 260px; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.search input { padding-left: 44px; padding-top: .75rem; padding-bottom: .75rem; border-radius: 14px; }
+ .search input { padding-left: 44px; padding-right: 46px; padding-top: .75rem; padding-bottom: .75rem; border-radius: 14px; }
+.search-clear {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: transparent; color: var(--muted);
+  font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.search-clear:hover { background: var(--surface-2); color: var(--text); }
+.search-clear:active { background: var(--primary-soft); }
+.search-clear[hidden] { display: none !important; }
+.search input[type="search"]::-webkit-search-cancel-button,
+.search input[type="search"]::-ms-clear { display: none; -webkit-appearance: none; appearance: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .chip {
   --h: 245; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text);
@@ -518,6 +530,7 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
       <div class="search">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
         <input id="search" type="search" placeholder="Поиск по-венгерски или по-русски…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Поиск по словарю">
+        <button type="button" class="search-clear" id="searchClear" aria-label="Очистить поиск" title="Очистить поиск" hidden>×</button>
       </div>
       <select id="statusSel" aria-label="Фильтр по статусу">
         <option value="all">Все слова</option>
@@ -1733,7 +1746,29 @@ details summary { cursor: pointer; font-weight: 600; margin-top: 12px; }
     renderChips(); renderCards();
     if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) $('#topicFilter').open = false;
   });
-  $('#search').addEventListener('input', function (e) { state.query = e.target.value; renderCards(); });
+  var searchInput = $('#search');
+  var searchClear = $('#searchClear');
+
+  function updateSearchClear() {
+    searchClear.hidden = searchInput.value.length === 0;
+  }
+
+  searchInput.addEventListener('input', function (e) {
+    state.query = e.target.value;
+    updateSearchClear();
+    renderCards();
+  });
+
+  searchClear.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  searchClear.addEventListener('click', function () {
+    searchInput.value = '';
+    state.query = '';
+    updateSearchClear();
+    renderCards();
+    searchInput.focus({ preventScroll: true });
+  });
+  updateSearchClear();
+
   $('#sort').addEventListener('change', function (e) { state.cfg.sort = e.target.value; saveCfg(); renderCards(); });
   $('#statusSel').addEventListener('change', function (e) { state.status = e.target.value; renderCards(); });
 
